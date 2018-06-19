@@ -74,15 +74,17 @@ void inverse_kinematic(float r[12], float p[6]){
   while(p[4] < -0.523599) p[4] += 6.28319;
 }
 
-void joint_space (float sp[6], float sv[6], float ep[6], float ev[6], float tf){
-  float a[4];
+void joint_space (float sp[6], float sv[6], float sa[6], float ep[6], float ev[6], float ea[6], float tf){
+  float a[6];
   int t = 0;
   string fname;
   for (int i = 0; i < 6; i++){
     a[0] = sp[i];
     a[1] = sv[i];
-    a[2] = 3*(ep[i]-sp[i])/pow(tf,2)-2*sv[i]/tf-ev[i]/tf;
-    a[3] = -2*(ep[i]-sp[i])/pow(tf,3)+(ev[i]+sv[i])/pow(tf,2);
+    a[2] = sa[i]/2;
+    a[3] = (20*ep[i]-20*sp[i]-(8*ev[i]+12*sv[i])*tf-(3*sa[i]-ea[i])*pow(tf,2))/(2*pow(tf,3));
+    a[4] = (30*sp[i]-30*ep[i]+(14*ev[i]+16*sv[i])*tf+(3*sa[i]-2*ea[i])*pow(tf,2))/(2*pow(tf,4));
+    a[5] = (12*ep[i]-12*sp[i]-(6*ev[i]+6*sv[i])*tf-(sa[i]-ea[i])*pow(tf,2))/(2*pow(tf,5));
     fname = "JS";
     fname = fname + char('1'+i);
     ofstream fout;
@@ -93,7 +95,7 @@ void joint_space (float sp[6], float sv[6], float ep[6], float ev[6], float tf){
     }
     t = 0;
     while (t < tf*PHz){
-      fout << a[0]+a[1]*t/PHz+a[2]*pow(t/PHz,2)+a[3]*pow(t/PHz,3) << endl;
+      fout << a[0]+a[1]*t/PHz+a[2]*pow(t/PHz,2)+a[3]*pow(t/PHz,3)+a[4]*pow(t/PHz,4)+a[5]*pow(t/PHz,5) << endl;
       t++;
     }
     fout.close();
@@ -157,8 +159,63 @@ void INE(float p[6], float pd[6], float pdd[6]){
     w[i+1] = R[i]*w[i]+pdZ;
     wd[i+1] = R[i]*wd[i]+(R[i]*w[i])%pdZ+pddZ;
     vd[i+1] = R[i]*(wd[i]%P[i]+w[i]%(w[i]%P[i])+vd[i]);
-    
   }
+}
+
+void PDControl(float sp[6], float ep[6]){
+  float Kp = 0.1;
+  float Kd = 0.2;
+  float p[6] = {sp[0],sp[1],sp[2],sp[3],sp[4],sp[5]};
+  float v[6] = {0,0,0,0,0,0};
+  float a[6] = {0,0,0,0,0,0};
+  float t[6] = {0,0,0,0,0,0};
+  float I[6] = {1,1,1,1,1,1};
+  string fname;
+  fname = "PD";
+  ofstream fout;
+  fout.open(fname.c_str());
+  if(fout.fail()){
+    cout << "fileopen failed" << endl;
+    exit(1);
+  }
+  for (int tim = 0; tim <100; tim++){
+    for (int i=0; i<6; i++){
+      t[i] = Kp*(ep[i]-p[i])-Kd*v[i];
+      a[i] = I[i]*t[i];
+      v[i] += a[i];
+      p[i] += v[i];
+    }
+    fout << tim << "\t" << p[0] << "\t" << p[1] << "\t" << p[2] << "\t" << p[3] << "\t" << p[4] << "\t" << p[5] << "\t" << endl;
+  }
+  fout.close();
+}
+
+float CTM(float sp[6], float ep[6]){
+  float Kp = -0.1;
+  float Kv = 0.2;
+  float p[6] = {sp[0],sp[1],sp[2],sp[3],sp[4],sp[5]};
+  float v[6] = {0,0,0,0,0,0};
+  float a[6] = {0,0,0,0,0,0};
+  float t[6] = {0,0,0,0,0,0};
+  float I[6] = {1,1,1,1,1,1};
+  string fname;
+  fname = "PD";
+  ofstream fout;
+  fout.open(fname.c_str());
+  if(fout.fail()){
+    cout << "fileopen failed" << endl;
+    exit(1);
+  }
+  for (int tim = 0; tim <100; tim++){
+    for (int i=0; i<6; i++){
+      a[i] = -Kp*(ep[i]-p[i])-Kv*v[i];
+      t[i] = a[i]/I[i];
+      v[i] += a[i];
+      p[i] += v[i];
+    }
+    fout << tim << "\t" << p[0] << "\t" << p[1] << "\t" << p[2] << "\t" << p[3] << "\t" << p[4] << "\t" << p[5] << "\t" << endl;
+  }
+  fout.close();
 }
 
 int main(){
@@ -167,20 +224,17 @@ int main(){
   float r[12];
   float sp[6] = {2.7,-1.2,2.3,-2,-0.3,6};
   float sv[6] = {0,0,0,0,0,0};
+  float sa[6] = {0,0,0,0,0,0};
   float ep[6] = {0,0,0,0,0,0};
   float ev[6] = {0,0,0,0,0,0};
+  float ea[6] = {0,0,0,0,0,0};
   khantei(p);
   kinematic(p, r);
   matrix_out(r);
   inverse_kinematic(r,ip);
   vector_out(ip);
-  joint_space (sp, sv, ep, ev, 3);
-  float pd[6] = {2.7,-1.2,2.3,-2,-0.3,6};
-  float pdd[6] = {2.7,-1.2,2.3,-2,-0.3,6};
-  INE(p, pd, pdd);
+  PDControl(sp,ep);
+  joint_space (sp, sv, sa, ep, ev, ea, 3);
   return 0;
 }
-
-
-
 
