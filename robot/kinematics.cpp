@@ -2,8 +2,10 @@
 #include <fstream>
 #include <string>
 #include <cstdlib>  // abs() for integer
-#include <cmath>    // abs() for float, and fabs()
+#include <cmath>    // abs() for double, and fabs()
 #include "Matrix3D.h"
+#include "client.h"
+#include "kinematics.h"
 
 #define a1 20
 #define a2 165
@@ -12,7 +14,57 @@
 
 using namespace std;
 
-void khantei(float p[6]){
+RobotArm::RobotArm(){
+  for (int i = 0;i<6;i++){
+  p[i] = 0;
+  v[i] = 0;
+  a[i] = 0;
+  }
+}
+
+void RobotArm::setp(double pp[6], double vv[6], double aa[6]){
+  for (int i=0;i<6;i++){
+    p[i] = pp[i];
+    v[i] = vv[i];
+    a[i] = aa[i];
+  }
+}
+
+void RobotArm::setR(double RR[12]){
+  for (int i=0;i<12;i++){
+    r[i] = RR[i];
+  }
+}
+
+void RobotArm::EulerAngle(){
+  if(abs(r[9] -1.0) < 0.001){
+    tx = PI/2;
+    ty = 0;
+    tz = atan2(r[4], r[0]);
+  }else if(abs(r[9]+1.0) < 0.001){
+    tx = PI/2;
+    ty = 0;
+    tz = atan2(r[4], r[0]);
+  }else{
+    tx = asin(r[9]);
+    ty = atan2(-r[8],r[10]);
+    tz = atan2(-r[2], r[5]);
+  }
+}
+
+void RobotArm::InvEulerAngle(){
+  r[0] = cos(ty)*cos(tz) - sin(tx)*sin(ty)*sin(tz);
+  r[1] = -cos(tx)*sin(tz);
+  r[2] = sin(ty)*cos(tz) + sin(tx)*cos(ty)*sin(tz);
+  r[4] = cos(ty)*sin(tz) + sin(tx)*sin(ty)*cos(tz);
+  r[5] = cos(tx)*cos(tz);
+  r[6] = sin(tz)*sin(ty) - sin(tz)*cos(ty)*cos(tz);
+  r[8] = -cos(tx)*sin(ty);
+  r[9] = sin(tx);
+  r[10] = cos(tx)*cos(ty);
+}
+
+void RobotArm::khantei(){
   int flag = 0;
   //可動範囲の制限
   if(abs(p[0]) > 2.96706) flag = 1;
@@ -27,18 +79,7 @@ void khantei(float p[6]){
   }
 }
 
-void matrix_out(float r[12]){
-  cout << r[0] << "\t" << r[1] << "\t" << r[2] << "\t" << r[3] << endl;
-  cout << r[4] << "\t" << r[5] << "\t" << r[6] << "\t" << r[7] << endl;
-  cout << r[8] << "\t" << r[9] << "\t" << r[10] << "\t" << r[11] << endl;
-  cout << 0 << "\t" << 0 << "\t" << 0 << "\t" << 1 <<endl;
-}
-
-void vector_out(float p[6]){
-  cout << p[0] << "\t" << p[1] << "\t" << p[2] << "\t" << p[3] << "\t"  << p[4] << "\t" << p[5] << "\t" << endl;
-}
-
-void kinematic(float p[6], float r[12]){
+void RobotArm::kinematic(){
   r[0] = cos(p[0])*(cos(p[1]+p[2])*(cos(p[3])*cos(p[4])*cos(p[5])-sin(p[3])*sin(p[5]))-sin(p[1]+p[2])*sin(p[4])*cos(p[5]))-sin(p[0])*(sin(p[3])*cos(p[4])*cos(p[5])+cos(p[3])*sin(p[5]));
   r[4] = sin(p[0])*(cos(p[1]+p[2])*(cos(p[3])*cos(p[4])*cos(p[5])-sin(p[3])*sin(p[5]))-sin(p[1]+p[2])*sin(p[4])*cos(p[5]))+cos(p[0])*(sin(p[3])*cos(p[4])*cos(p[5])+cos(p[3])*sin(p[5]));
   r[8] = -sin(p[1]+p[2])*(cos(p[3])*cos(p[4])*cos(p[5])-sin(p[3])*sin(p[5]))-cos(p[1]+p[2])*sin(p[4])*cos(p[5]);
@@ -53,7 +94,7 @@ void kinematic(float p[6], float r[12]){
   r[11] = cos(p[1]+p[2])*d4+cos(p[1])*a2;
 }
 
-void inverse_kinematic(float r[12], float p[6]){
+void RobotArm::inverse_kinematic(){
   p[0] = atan2(r[7], r[3]);
   p[2] = acos((pow(r[3],2)+pow(r[7],2)+pow(r[11],2)-2*(cos(p[0])*r[3]+sin(p[0])*r[7])*a1+pow(a1,2)-pow(d4,2)-pow(a2,2))/(2*d4*a2));
   p[1] = atan2(a2*sin(p[2])*r[11]+(cos(p[0])*r[3]+sin(p[0])*r[7]-a1)*(a2*cos(p[2])+d4), (a2*cos(p[2])+d4)*r[11]-a2*sin(p[2])*(cos(p[0])*r[3]+sin(p[0])*r[7]-a1))-p[2];
@@ -74,17 +115,17 @@ void inverse_kinematic(float r[12], float p[6]){
   while(p[4] < -0.523599) p[4] += 6.28319;
 }
 
-void joint_space (float sp[6], float sv[6], float sa[6], float ep[6], float ev[6], float ea[6], float tf){
-  float a[6];
+void RobotArm::joint_space (double ep[6], double ev[6], double ea[6], double tf){
+  double a[6];
   int t = 0;
   string fname;
   for (int i = 0; i < 6; i++){
-    a[0] = sp[i];
-    a[1] = sv[i];
-    a[2] = sa[i]/2;
-    a[3] = (20*ep[i]-20*sp[i]-(8*ev[i]+12*sv[i])*tf-(3*sa[i]-ea[i])*pow(tf,2))/(2*pow(tf,3));
-    a[4] = (30*sp[i]-30*ep[i]+(14*ev[i]+16*sv[i])*tf+(3*sa[i]-2*ea[i])*pow(tf,2))/(2*pow(tf,4));
-    a[5] = (12*ep[i]-12*sp[i]-(6*ev[i]+6*sv[i])*tf-(sa[i]-ea[i])*pow(tf,2))/(2*pow(tf,5));
+    a[0] = p[i];
+    a[1] = v[i];
+    a[2] = a[i]/2;
+    a[3] = (20*ep[i]-20*p[i]-(8*ev[i]+12*v[i])*tf-(3*a[i]-ea[i])*pow(tf,2))/(2*pow(tf,3));
+    a[4] = (30*p[i]-30*ep[i]+(14*ev[i]+16*v[i])*tf+(3*a[i]-2*ea[i])*pow(tf,2))/(2*pow(tf,4));
+    a[5] = (12*ep[i]-12*p[i]-(6*ev[i]+6*v[i])*tf-(a[i]-ea[i])*pow(tf,2))/(2*pow(tf,5));
     fname = "JS";
     fname = fname + char('1'+i);
     ofstream fout;
@@ -102,74 +143,14 @@ void joint_space (float sp[6], float sv[6], float sa[6], float ep[6], float ev[6
   }
 }
 
-void construct_matrix(float p[6], Matrix3D R[6], Vector3D P[6]){
-  Matrix3D r0(	cos(p[0]), -sin(p[0]), 0,
-		sin(p[0]), cos(p[0]), 0,
-		0, 0, 1);
-  Vector3D p0(0,0,0);
-  R[0] = r0;
-  P[0] = p0;
-  Matrix3D r1(	sin(p[1]), cos(p[1]), 0,
-		0, 0, 1,
-		cos(p[1]), -sin(p[1]), 0);
-  Vector3D p1(a1,0,0);
-  R[1] = r1;
-  P[1] = p1;
-  Matrix3D r2(	-sin(p[2]), -cos(p[2]), 0,
-		cos(p[2]), sin(p[2]), 0,
-		0, 0, 1);
-  Vector3D p2(a2,0,0);
-  R[2] = r2;
-  P[2] = p2;
-  Matrix3D r3(	cos(p[3]), -sin(p[3]), 0,
-		0, 0, -1,
-		sin(p[3]), cos(p[3]), 0);
-  Vector3D p3(0,-d4,0);
-  R[3] = r3;
-  P[3] = p3;
-  Matrix3D r4(	cos(p[4]), -sin(p[4]), 0,
-		0, 0, 1,
-		-sin(p[4]), -cos(p[4]), 0);
-  Vector3D p4(0,0,0);
-  R[4] = r4;
-  P[4] = p4;
-  Matrix3D r5(	cos(p[5]), -sin(p[5]), 0,
-		0, 0, -1,
-		sin(p[5]), cos(p[5]), 0);
-  Vector3D p5(0,0,0);
-  R[5] = r5;
-  P[5] = p5;
-}
-
-void INE(float p[6], float pd[6], float pdd[6]){
-  Vector3D w[7], wd[7], vd[7], vCd[7], F[7], N[7];
-  Matrix3D R[6];
-  Vector3D P[6];
-  Vector3D a(0,0,0);
-  w[0] = a;
-  wd[0] = a;
-  vd[0] = a;
-  vCd[0] = a;
-  F[0] = a;
-  N[0] = a;
-  construct_matrix(p, R, P);
-  for(int i; i < 6; i++){
-    Vector3D pdZ(0,0,pd[i]);
-    Vector3D pddZ(0,0,pdd[i]);
-    w[i+1] = R[i]*w[i]+pdZ;
-    wd[i+1] = R[i]*wd[i]+(R[i]*w[i])%pdZ+pddZ;
-    vd[i+1] = R[i]*(wd[i]%P[i]+w[i]%(w[i]%P[i])+vd[i]);
-  }
-}
-
-void PDControl(float sp[6], float ep[6]){
-  float Kp = 0.1;
-  float Kd = 0.2;
-  float p[6] = {sp[0],sp[1],sp[2],sp[3],sp[4],sp[5]};
-  float v[6] = {0,0,0,0,0,0};
-  float a[6] = {0,0,0,0,0,0};
-  float t[6] = {0,0,0,0,0,0};
-  float I[6] = {1,1,1,1,1,1};
+void RobotArm::PDControl(double sp[6], double ep[6]){
+  double Kp = 0.1;
+  double Kd = 0.2;
+  double p[6] = {sp[0],sp[1],sp[2],sp[3],sp[4],sp[5]};
+  double v[6] = {0,0,0,0,0,0};
+  double a[6] = {0,0,0,0,0,0};
+  double t[6] = {0,0,0,0,0,0};
+  double I[6] = {1,1,1,1,1,1};
   string fname;
   fname = "PD";
   ofstream fout;
@@ -190,14 +171,14 @@ void PDControl(float sp[6], float ep[6]){
   fout.close();
 }
 
-float CTM(float sp[6], float ep[6]){
-  float Kp = -0.1;
-  float Kv = 0.2;
-  float p[6] = {sp[0],sp[1],sp[2],sp[3],sp[4],sp[5]};
-  float v[6] = {0,0,0,0,0,0};
-  float a[6] = {0,0,0,0,0,0};
-  float t[6] = {0,0,0,0,0,0};
-  float I[6] = {1,1,1,1,1,1};
+void RobotArm::CTM(double sp[6], double ep[6]){
+  double Kp = -0.1;
+  double Kv = 0.2;
+  double p[6] = {sp[0],sp[1],sp[2],sp[3],sp[4],sp[5]};
+  double v[6] = {0,0,0,0,0,0};
+  double a[6] = {0,0,0,0,0,0};
+  double t[6] = {0,0,0,0,0,0};
+  double I[6] = {1,1,1,1,1,1};
   string fname;
   fname = "PD";
   ofstream fout;
@@ -218,23 +199,44 @@ float CTM(float sp[6], float ep[6]){
   fout.close();
 }
 
+void RobotArm::R_out(){
+  cout << r[0] << "\t" << r[1] << "\t" << r[2] << "\t" << r[3] << endl;
+  cout << r[4] << "\t" << r[5] << "\t" << r[6] << "\t" << r[7] << endl;
+  cout << r[8] << "\t" << r[9] << "\t" << r[10] << "\t" << r[11] << endl;
+  cout << 0 << "\t" << 0 << "\t" << 0 << "\t" << 1 <<endl;
+}
+
+void RobotArm::p_out(){
+  cout << p[0] << "\t" << p[1] << "\t" << p[2] << "\t" << p[3] << "\t"  << p[4] << "\t" << p[5] << "\t" << endl;
+}
+
 int main(){
-  float p[6] = {2.7,-1.2,2.3,-2,-0.3,6};
-  float ip[6];
-  float r[12];
-  float sp[6] = {2.7,-1.2,2.3,-2,-0.3,6};
-  float sv[6] = {0,0,0,0,0,0};
-  float sa[6] = {0,0,0,0,0,0};
-  float ep[6] = {0,0,0,0,0,0};
-  float ev[6] = {0,0,0,0,0,0};
-  float ea[6] = {0,0,0,0,0,0};
-  khantei(p);
-  kinematic(p, r);
-  matrix_out(r);
-  inverse_kinematic(r,ip);
-  vector_out(ip);
-  PDControl(sp,ep);
-  joint_space (sp, sv, sa, ep, ev, ea, 3);
+  SocketCommunication so1;
+  so1.Init();
+  double coo[6] = {0,0,0,0,0,0};
+  To_MotoMiniStruct coord;
+  for (int i = 0; i < 6; i++){
+    coord.Coord[i] = coo[i];
+  }
+  so1.SendCoord(&coord);
+  From_MotoMiniStruct *ang;
+  so1.ReceiveAng(ang);
+  so1.Terminate();
+  RobotArm Robot;
+  double sp[6] = {2.7,-1.2,2.3,-2,-0.3,6};
+  double sv[6] = {0,0,0,0,0,0};
+  double sa[6] = {0,0,0,0,0,0};
+  double ep[6] = {0,0,0,0,0,0};
+  double ev[6] = {0,0,0,0,0,0};
+  double ea[6] = {0,0,0,0,0,0};
+  Robot.setp(sp, sv, sa);
+  Robot.khantei();
+  Robot.kinematic();
+  Robot.inverse_kinematic();
+  Robot.R_out();
+  Robot.p_out();
+  Robot.joint_space(ep,ev,ea, 3);
+  Robot.PDControl(sp,ep);
   return 0;
 }
 
