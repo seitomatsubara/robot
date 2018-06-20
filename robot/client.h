@@ -26,8 +26,10 @@ public:
 
 	int Init(void);					// Start connection
 	int SendCoord(To_MotoMiniStruct* coord);	// input coord
+	int SendAng(To_MotoMiniStruct* ang);		// input angle [rad]
 	int ReceiveAng(From_MotoMiniStruct* ang);	// Recive angle
 	int ChangeSpd(double speed);			// [mm/sec] default 50
+	int ChangeMode(int mode);			// 0:reach, 1:tmp
 	void Terminate(void);				// Close connection
 
 	//void ChangePhi2Ang(To_MotoMiniStruct* torq);	

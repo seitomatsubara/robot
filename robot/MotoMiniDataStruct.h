@@ -9,7 +9,7 @@
 /* Data struct to send to MotoMini */
 /*----------------------------------------*/
 typedef struct{
-   double Coord[NUM_OF_JOINT]; //Coordinate of goal
+   double elem[NUM_OF_JOINT]; //element of sending data
 } To_MotoMiniStruct;
 
 

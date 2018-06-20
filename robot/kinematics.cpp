@@ -3,10 +3,10 @@
 #include <string>
 #include <cstdlib>  // abs() for integer
 #include <cmath>    // abs() for double, and fabs()
-#include "Matrix3D.h"
 #include "client.h"
 #include "kinematics.h"
 
+#define PI 3.141592
 #define a1 20
 #define a2 165
 #define d4 165
@@ -211,18 +211,27 @@ void RobotArm::p_out(){
 }
 
 int main(){
+  Timer tim;
   SocketCommunication so1;
   so1.Init();
-  double coo[6] = {0,0,0,0,0,0};
+  double coo[6] = {185,0,125,180,0,0};
   To_MotoMiniStruct coord;
   for (int i = 0; i < 6; i++){
-    coord.Coord[i] = coo[i];
+    coord.elem[i] = coo[i];
+  }
+  int err = so1.ChangeMode(1);
+  err += so1.ChangeSpd(100);
+  if (err > 0) exit(1);
+  for (int j= 0; j<100;j++){
+    tim.StartLoopTime();
+    so1.SendCoord(&coord);
+    coord.elem[2] = 50*cos(2*PI*j/100)+25;
+    coord.elem[0] = 10*sin(2*PI*j/100)+100;
+    tim.SleepLoopTime(0.1);
   }
   so1.SendCoord(&coord);
-  From_MotoMiniStruct *ang;
-  so1.ReceiveAng(ang);
   so1.Terminate();
-  RobotArm Robot;
+  /*RobotArm Robot;
   double sp[6] = {2.7,-1.2,2.3,-2,-0.3,6};
   double sv[6] = {0,0,0,0,0,0};
   double sa[6] = {0,0,0,0,0,0};
@@ -237,6 +246,7 @@ int main(){
   Robot.p_out();
   Robot.joint_space(ep,ev,ea, 3);
   Robot.PDControl(sp,ep);
+  */
   return 0;
 }
 
